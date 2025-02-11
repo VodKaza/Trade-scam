@@ -1,0 +1,312 @@
+--[[
+  Optimized Da Hood Camlock with Improved Jump Prediction
+  - The camlock update function now uses separate multipliers for vertical prediction so that when the target jumps the camera doesn’t look at the floor.
+  - All key prediction values (Matrix Auto Prediction, Smoothness, Manual Horizontal/Vertical Offsets, Jump/Fall Offsets, Auto Air Delay) are adjustable via text inputs.
+  - A persistent, draggable activation button (“Mythic.lua”) toggles camlock.
+  - The auto prediction (ping base) option has been removed.
+--]]
+
+-----------------------------------------------------
+-- Load UI Library and Create Main UI
+-----------------------------------------------------
+local success, Library = pcall(function()
+    return loadstring(game:HttpGet('https://raw.githubusercontent.com/LionTheGreatRealFrFr/MobileLinoriaLib/main/Library.lua'))()
+end)
+if not success then
+    warn("Failed to load UI Library!")
+    return
+end
+
+local ThemeManager = loadstring(game:HttpGet('https://raw.githubusercontent.com/LionTheGreatRealFrFr/MobileLinoriaLib/main/addons/ThemeManager.lua'))()
+local SaveManager = loadstring(game:HttpGet('https://raw.githubusercontent.com/LionTheGreatRealFrFr/MobileLinoriaLib/main/addons/SaveManager.lua'))()
+
+local Window = Library:CreateWindow({
+    Title = 'Mythic.lua',
+    Center = true,
+    AutoShow = true
+})
+local Tabs = {
+    Main = Window:AddTab('Main'),
+    ['UI Settings'] = Window:AddTab('UI Settings'),
+}
+
+-----------------------------------------------------
+-- Services and Core Variables
+-----------------------------------------------------
+local Players = game:GetService("Players")
+local LocalPlayer = Players.LocalPlayer
+local Mouse = LocalPlayer:GetMouse()
+local Camera = workspace.CurrentCamera
+local RunService = game:GetService("RunService")
+
+------------------------------
+-- Camlock Variables (Matrix–style)
+------------------------------
+local camlockEnabled = false      -- Controlled by the UI toggle
+local camlockActive = false         -- Controlled by our separate button
+local lockedTarget = nil            -- The current target (set when button is pressed)
+local selectedTargetPart = "HumanoidRootPart"
+
+-- Base prediction settings for camlock
+local matrixAutoPred = 0.3          -- Base multiplier for horizontal prediction (for X & Z)
+local matrixSmoothness = 1          -- 1 = instantaneous; values > 1 give smoothing.
+-- Manual offsets (entered via text inputs)
+local horizontalPrediction = 0      
+local verticalPrediction = 0        
+
+------------------------------
+-- Auto Air & Auto Shoot Variables
+------------------------------
+local autoAirEnabled = false
+local autoShootEnabled = false
+local jumpOffset = 0.22    -- Upward velocity threshold for jump
+local fallOffset = 0.22    -- Downward velocity threshold for fall
+local autoAirDelay = 0.08  -- Delay (in seconds) before auto air activates
+
+local lastAutoAirTime = 0
+
+------------------------------
+-- Utility: Get Closest Player
+------------------------------
+local function getClosestPlayer()
+    local closestPlayer = nil
+    local shortestDist = math.huge
+
+    for _, player in pairs(Players:GetPlayers()) do
+        if player ~= LocalPlayer and player.Character and player.Character:FindFirstChild(selectedTargetPart) then
+            local screenPos, onScreen = Camera:WorldToViewportPoint(player.Character[selectedTargetPart].Position)
+            if onScreen then
+                local distance = (Vector2.new(screenPos.X, screenPos.Y) - Vector2.new(Mouse.X, Mouse.Y)).Magnitude
+                if distance < shortestDist then
+                    shortestDist = distance
+                    closestPlayer = player
+                end
+            end
+        end
+    end
+    return closestPlayer
+end
+
+------------------------------
+-- Camlock Update Function (RenderStepped)
+------------------------------
+RunService.RenderStepped:Connect(function()
+    if camlockEnabled and camlockActive and lockedTarget and lockedTarget.Character and lockedTarget.Character:FindFirstChild(selectedTargetPart) then
+        local targetPart = lockedTarget.Character[selectedTargetPart]
+        
+        -- Get the target's velocity components.
+        local vx = targetPart.Velocity.X
+        local vy = targetPart.Velocity.Y
+        local vz = targetPart.Velocity.Z
+
+        -- Use the base horizontal multiplier for X & Z.
+        local horizontalMultiplier = matrixAutoPred  
+        -- For vertical prediction, use a stronger multiplier when the target is jumping upward.
+        local verticalMultiplier = matrixAutoPred
+        if vy > jumpOffset then
+            verticalMultiplier = matrixAutoPred * 2.0  -- stronger upward prediction when jumping
+        elseif vy < -fallOffset then
+            verticalMultiplier = matrixAutoPred * 1.0  -- falling: use base multiplier
+        end
+
+        local predictedX = targetPart.Position.X + (vx * horizontalMultiplier)
+        local predictedY = targetPart.Position.Y + (vy * verticalMultiplier)
+        local predictedZ = targetPart.Position.Z + (vz * horizontalMultiplier)
+        
+        local predictedPos = Vector3.new(predictedX, predictedY, predictedZ) + Vector3.new(horizontalPrediction, verticalPrediction, 0)
+        local targetCFrame = CFrame.lookAt(Camera.CFrame.Position, predictedPos)
+        
+        if matrixSmoothness <= 1 then
+            Camera.CFrame = targetCFrame
+        else
+            Camera.CFrame = Camera.CFrame:Lerp(targetCFrame, 1 / matrixSmoothness)
+        end
+    end
+end)
+
+------------------------------
+-- Auto Air & Auto Shoot Update (Heartbeat)
+------------------------------
+RunService.Heartbeat:Connect(function()
+    if autoAirEnabled and autoShootEnabled and lockedTarget and lockedTarget.Character then
+        local root = lockedTarget.Character:FindFirstChild("HumanoidRootPart")
+        if root then
+            local currentTime = tick()
+            if (root.Velocity.Y > jumpOffset or root.Velocity.Y < -fallOffset) and (currentTime - lastAutoAirTime > autoAirDelay) then
+                lastAutoAirTime = currentTime
+                local Tool = LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Tool")
+                if Tool then
+                    Tool:Activate()
+                end
+            end
+        end
+    end
+end)
+
+-----------------------------------------------------
+-- UI Elements (Settings)
+-----------------------------------------------------
+local LeftGroupBox = Tabs.Main:AddLeftGroupbox('Camlock Settings (Matrix)')
+
+LeftGroupBox:AddToggle('CamlockToggle', {
+    Text = 'Enable Camlock',
+    Default = false,
+    Callback = function(Value)
+        camlockEnabled = Value
+        if camlockEnabled then
+            Library:Notify("Camlock Enabled")
+        else
+            Library:Notify("Camlock Disabled")
+            lockedTarget = nil
+        end
+    end
+})
+
+LeftGroupBox:AddButton('Change Target Part', function()
+    local parts = { "HumanoidRootPart", "UpperTorso", "Head", "RightHand", "LowerTorso" }
+    local index = table.find(parts, selectedTargetPart) or 1
+    selectedTargetPart = parts[(index % #parts) + 1]
+    Library:Notify("Target Part set to: " .. selectedTargetPart)
+end)
+
+LeftGroupBox:AddInput('MatrixAutoPred', {
+    Default = tostring(matrixAutoPred),
+    Numeric = true,
+    Finished = true,
+    Text = 'Matrix Auto Prediction',
+    Placeholder = 'Enter Prediction Multiplier',
+    Callback = function(Value)
+        matrixAutoPred = tonumber(Value) or matrixAutoPred
+        Library:Notify("Matrix Auto Prediction set to " .. matrixAutoPred)
+    end
+})
+
+LeftGroupBox:AddInput('MatrixSmoothness', {
+    Default = tostring(matrixSmoothness),
+    Numeric = true,
+    Finished = true,
+    Text = 'Matrix Smoothness',
+    Placeholder = '1 = Instant; >1 for smoothing',
+    Callback = function(Value)
+        matrixSmoothness = tonumber(Value) or matrixSmoothness
+        Library:Notify("Matrix Smoothness set to " .. matrixSmoothness)
+    end
+})
+
+LeftGroupBox:AddInput('HorizontalX', {
+    Default = tostring(horizontalPrediction),
+    Numeric = true,
+    Finished = true,
+    Text = 'Manual Horizontal X',
+    Placeholder = 'Enter Horizontal Offset',
+    Callback = function(Value)
+        horizontalPrediction = tonumber(Value) or horizontalPrediction
+        Library:Notify("Manual Horizontal Offset set to " .. horizontalPrediction)
+    end
+})
+
+LeftGroupBox:AddInput('VerticalY', {
+    Default = tostring(verticalPrediction),
+    Numeric = true,
+    Finished = true,
+    Text = 'Manual Vertical Y',
+    Placeholder = 'Enter Vertical Offset',
+    Callback = function(Value)
+        verticalPrediction = tonumber(Value) or verticalPrediction
+        Library:Notify("Manual Vertical Offset set to " .. verticalPrediction)
+    end
+})
+
+local AutoAirGroup = Tabs.Main:AddRightGroupbox('Auto Air Settings')
+
+AutoAirGroup:AddToggle('AutoAirToggle', {
+    Text = 'Enable Auto Air',
+    Default = false,
+    Callback = function(Value)
+        autoAirEnabled = Value
+        Library:Notify("Auto Air " .. (Value and "Enabled" or "Disabled"))
+    end
+})
+
+AutoAirGroup:AddToggle('AutoShootToggle', {
+    Text = 'Enable Auto Shoot',
+    Default = false,
+    Callback = function(Value)
+        autoShootEnabled = Value
+        Library:Notify("Auto Shoot " .. (Value and "Enabled" or "Disabled"))
+    end
+})
+
+AutoAirGroup:AddInput('JumpOffset', {
+    Default = tostring(jumpOffset),
+    Numeric = true,
+    Finished = true,
+    Text = 'Jump Offset',
+    Placeholder = 'Enter Jump Offset',
+    Callback = function(Value)
+        jumpOffset = tonumber(Value) or jumpOffset
+        Library:Notify("Jump Offset set to " .. jumpOffset)
+    end
+})
+
+AutoAirGroup:AddInput('FallOffset', {
+    Default = tostring(fallOffset),
+    Numeric = true,
+    Finished = true,
+    Text = 'Fall Offset',
+    Placeholder = 'Enter Fall Offset',
+    Callback = function(Value)
+        fallOffset = tonumber(Value) or fallOffset
+        Library:Notify("Fall Offset set to " .. fallOffset)
+    end
+})
+
+AutoAirGroup:AddInput('AutoAirDelay', {
+    Default = tostring(autoAirDelay),
+    Numeric = true,
+    Finished = true,
+    Text = 'Auto Air Delay',
+    Placeholder = 'Enter Auto Air Delay',
+    Callback = function(Value)
+        autoAirDelay = tonumber(Value) or autoAirDelay
+        Library:Notify("Auto Air Delay set to " .. autoAirDelay)
+    end
+})
+
+-----------------------------------------------------
+-- Create a Persistent, Draggable Button for Camlock Activation
+-----------------------------------------------------
+local camlockButtonGui = Instance.new("ScreenGui")
+camlockButtonGui.Name = "CamlockButtonGui"
+camlockButtonGui.Parent = game:GetService("CoreGui")  -- Persistent UI
+
+local camlockButton = Instance.new("TextButton")
+camlockButton.Name = "CamlockButton"
+camlockButton.Size = UDim2.new(0, 200, 0, 80)  -- Larger button
+camlockButton.Position = UDim2.new(0, 10, 0, 10)
+camlockButton.Text = "Mythic.lua"
+camlockButton.BackgroundColor3 = Color3.new(1, 1, 1)  -- White background
+camlockButton.TextColor3 = Color3.new(0, 0, 0)  -- Black text
+camlockButton.Active = true
+camlockButton.Draggable = true
+camlockButton.Parent = camlockButtonGui
+
+camlockButton.MouseButton1Click:Connect(function()
+    if not camlockActive then
+        lockedTarget = getClosestPlayer()
+        if lockedTarget then
+            camlockActive = true
+            camlockButton.Text = "Unlock Cam"
+            Library:Notify("Camlock Activated on: " .. lockedTarget.Name)
+        else
+            Library:Notify("No target found!")
+        end
+    else
+        camlockActive = false
+        lockedTarget = nil
+        camlockButton.Text = "Mythic.lua"
+        Library:Notify("Camlock Deactivated")
+    end
+end)
+
+Library:Notify("Mythic.lua UI Loaded Successfully!")
